@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, TrendingUp, Clock, BookOpen } from "lucide-react";
+import { Sparkles, TrendingUp, Clock, BookOpen, Plus } from "lucide-react";
 import { BookRow } from "@/components/BookRow";
 import { BookCard } from "@/components/BookCard";
 import { fetchBooks, fetchTrending, fetchRecommendations } from "@/services/api";
@@ -8,6 +8,7 @@ import { useLibrary } from "@/context/LibraryContext";
 import { useAuth } from "@/context/AuthContext";
 import { useSearchParams } from "react-router-dom";
 import type { Book } from "@/data/books";
+import { BookForm } from "@/components/BookForm";
 
 export default function DiscoverPage() {
   const [trending, setTrending] = useState<Book[]>([]);
@@ -19,8 +20,10 @@ export default function DiscoverPage() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
+  const [isBookFormOpen, setIsBookFormOpen] = useState(false);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
+    setLoading(true);
     Promise.all([fetchTrending(), fetchRecommendations(), fetchBooks(query || undefined)])
       .then(([t, r, a]) => {
         setTrending(t);
@@ -29,6 +32,10 @@ export default function DiscoverPage() {
         setLoading(false);
       });
   }, [query]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (recentlyViewed.length > 0) {
@@ -55,16 +62,34 @@ export default function DiscoverPage() {
           <p className="text-muted-foreground mb-6">
             Explore thousands of books, audiobooks, and AI-curated recommendations tailored for you.
           </p>
-          <div className="flex gap-3">
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm font-medium text-foreground">
-              <BookOpen className="w-4 h-4" /> 12k+ Books
-            </span>
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm font-medium text-foreground">
-              <Sparkles className="w-4 h-4 text-primary" /> AI Powered
-            </span>
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="flex gap-3">
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm font-medium text-foreground">
+                <BookOpen className="w-4 h-4" /> 12k+ Books
+              </span>
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm font-medium text-foreground">
+                <Sparkles className="w-4 h-4 text-primary" /> AI Powered
+              </span>
+            </div>
+            
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsBookFormOpen(true)}
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-bold shadow-lg shadow-primary/20 transition-all ml-auto md:ml-0"
+            >
+              <Plus className="w-5 h-5" />
+              Add New
+            </motion.button>
           </div>
         </div>
       </motion.div>
+
+      <BookForm 
+        isOpen={isBookFormOpen} 
+        onClose={() => setIsBookFormOpen(false)} 
+        onSuccess={loadData}
+      />
 
       {query && (
         <div>
@@ -72,7 +97,7 @@ export default function DiscoverPage() {
             Results for "{query}"
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {allBooks.map((b, i) => <BookCard key={b.id} book={b} index={i} />)}
+            {allBooks.map((b, i) => <BookCard key={b.id} book={b} index={i} onRefresh={loadData} />)}
           </div>
           {allBooks.length === 0 && !loading && (
             <p className="text-muted-foreground text-center py-12">No books found.</p>
@@ -98,7 +123,7 @@ export default function DiscoverPage() {
           <div>
             <h2 className="text-xl font-display font-bold text-foreground mb-4">📚 All Books</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {allBooks.map((b, i) => <BookCard key={b.id} book={b} index={i} />)}
+              {allBooks.map((b, i) => <BookCard key={b.id} book={b} index={i} onRefresh={loadData} />)}
             </div>
           </div>
         </>

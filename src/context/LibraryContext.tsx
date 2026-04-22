@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import type { Book } from "@/data/books";
+import * as api from "@/services/api";
+import { useAuth } from "./AuthContext";
 
 interface LibraryContextType {
   favorites: string[];
@@ -20,20 +21,79 @@ function loadArray(key: string): string[] {
 }
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
-  const [favorites, setFavorites] = useState<string[]>(() => loadArray("biblio_favorites"));
-  const [library, setLibrary] = useState<string[]>(() => loadArray("biblio_library"));
+  const { user, isAuthenticated } = useAuth();
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [library, setLibrary] = useState<string[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<string[]>(() => loadArray("biblio_recent"));
 
-  useEffect(() => { localStorage.setItem("biblio_favorites", JSON.stringify(favorites)); }, [favorites]);
-  useEffect(() => { localStorage.setItem("biblio_library", JSON.stringify(library)); }, [library]);
+  // Fetch favorites and library from backend when authenticated
+  useEffect(() => {
+    const fetchData = async () => {
+      if (isAuthenticated && user) {
+        try {
+          const favs = await api.fetchUserFavorites(user.id);
+          setFavorites(favs.map((f: any) => f.bookId));
+          
+          const libEntries = await api.fetchUserLibrary(user.id);
+          setLibrary(libEntries.map((l: any) => l.bookId));
+        } catch (error) {
+          console.error("Failed to fetch library data:", error);
+        }
+      } else {
+        setFavorites([]);
+        setLibrary([]);
+      }
+    };
+    fetchData();
+  }, [isAuthenticated, user]);
+
   useEffect(() => { localStorage.setItem("biblio_recent", JSON.stringify(recentlyViewed)); }, [recentlyViewed]);
 
-  const toggleFavorite = (id: string) => setFavorites(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);
+  const toggleFavorite = async (id: string) => {
+    if (!isAuthenticated) return;
+    
+    const isFav = favorites.includes(id);
+    try {
+      if (isFav) {
+        await api.removeFavorite(id);
+        setFavorites(prev => prev.filter(f => f !== id));
+      } else {
+        await api.addFavorite(id);
+        setFavorites(prev => [...prev, id]);
+      }
+    } catch (error) {
+      console.error("Error toggling favorite:", error);
+    }
+  };
+
   const isFavorite = (id: string) => favorites.includes(id);
-  const addToLibrary = (id: string) => setLibrary(prev => prev.includes(id) ? prev : [...prev, id]);
-  const removeFromLibrary = (id: string) => setLibrary(prev => prev.filter(l => l !== id));
+
+  const addToLibrary = async (id: string) => {
+    if (!isAuthenticated) return;
+    if (library.includes(id)) return;
+
+    try {
+      await api.addToUserLibrary(id);
+      setLibrary(prev => [...prev, id]);
+    } catch (error) {
+      console.error("Error adding to library:", error);
+    }
+  };
+
+  const removeFromLibrary = async (id: string) => {
+    if (!isAuthenticated) return;
+    
+    try {
+      await api.removeFromUserLibrary(id);
+      setLibrary(prev => prev.filter(l => l !== id));
+    } catch (error) {
+      console.error("Error removing from library:", error);
+    }
+  };
+
   const isInLibrary = (id: string) => library.includes(id);
   const addToRecentlyViewed = (id: string) => setRecentlyViewed(prev => [id, ...prev.filter(r => r !== id)].slice(0, 20));
+
 
   return (
     <LibraryContext.Provider value={{ favorites, library, recentlyViewed, toggleFavorite, isFavorite, addToLibrary, removeFromLibrary, isInLibrary, addToRecentlyViewed }}>
